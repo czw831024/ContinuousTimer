@@ -64,6 +64,7 @@
   #stopBtn { background: #ff5555; color: #fff; font-weight: 600; }
   #pauseBtn:disabled, #stopBtn:disabled { background: #44475a; color: #777; cursor: not-allowed; }
   #resetBtn { background: #44475a; color: #e0e0e8; }
+  #langBtn { background: #44475a; color: #e0e0e8; }
   #mergeBtn { background: #bd93f9; color: #1e1e2e; font-weight: 600; }
   #mergeBtn:disabled { background: #44475a; color: #777; cursor: not-allowed; }
   .merge-panel {
@@ -100,6 +101,8 @@
   table.preset tbody tr[data-n]:hover td { background: #50fa7b14; }
   tbody tr.active-seg td { background: #50fa7b26; }
   tbody tr.active-seg td:first-child { color: #50fa7b; font-weight: 700; }
+  tbody tr.active-child td { background: #50fa7b26 !important; }
+  tbody tr.active-child td:first-child { color: #50fa7b; }
   table {
     border-collapse: collapse;
     min-width: 32rem;
@@ -130,13 +133,13 @@
 </style>
 </head>
 <body>
-  <h1>⏱️ 连续计时器</h1>
+  <h1 id="titleEl">⏱️ 连续计时器</h1>
 
   <div class="setup">
-    <label>总时间：</label>
-    <input type="number" id="minInput" min="0" max="999" value="10"> 分
-    <input type="number" id="secInput" min="0" max="59" value="0"> 秒
-    <label style="margin-left:1rem">段数：</label>
+    <label id="totalLabel">总时间：</label>
+    <input type="number" id="minInput" min="0" max="999" value="10"> <span id="minUnit">分</span>
+    <input type="number" id="secInput" min="0" max="59" value="0"> <span id="secUnit">秒</span>
+    <label id="segLabel" style="margin-left:1rem">段数：</label>
     <input type="number" id="segInput" min="0" max="99" value="0" title="0 = 顺序记录模式；N = 预先显示 N 个时间段，点击时间段计时">
   </div>
 
@@ -148,10 +151,11 @@
     <button id="stopBtn" disabled>停止</button>
     <button id="mergeBtn" disabled>合并时间段</button>
     <button id="resetBtn">重置</button>
+    <button id="langBtn">转英文</button>
   </div>
 
   <div class="merge-panel" id="mergePanel" hidden>
-    <label>要合并的序号：</label>
+    <label id="mergeLabel">要合并的序号：</label>
     <input type="text" id="mergeInput" placeholder="点击下方时间段，或输入如 2 4 5">
     <button id="mergeOk">确认合并</button>
     <button id="mergeCancel">取消</button>
@@ -162,11 +166,11 @@
     <table id="lapTable" hidden>
       <thead>
         <tr>
-          <th>序号</th>
-          <th>开始倒计时</th>
-          <th>结束倒计时</th>
-          <th>时长</th>
-          <th>总时长</th>
+          <th id="thNo">序号</th>
+          <th id="thStart">开始倒计时</th>
+          <th id="thEnd">结束倒计时</th>
+          <th id="thDur">时长</th>
+          <th id="thTotal">总时长</th>
         </tr>
       </thead>
       <tbody id="lapBody"></tbody>
@@ -206,6 +210,76 @@
   let preset = false;     // 预设段数模式
   let activeIdx = null;   // 预设模式：当前正在计时的段下标
 
+  // ── 多语言 ──
+  const I18N = {
+    zh: {
+      docTitle: '连续计时器',
+      title: '⏱️ 连续计时器',
+      totalTime: '总时间：', min: '分', sec: '秒',
+      segCount: '段数：',
+      segTitle: '0 = 顺序记录模式；N = 预先显示 N 个时间段，点击时间段计时',
+      start: '开始', record: '记录时间段', clickSeg: '点击时间段计时', finished: '已结束',
+      pause: '暂停', resume: '继续', stop: '停止',
+      merge: '合并时间段', reset: '重置', lang: '转英文',
+      mergeLabel: '要合并的序号：',
+      mergePlaceholder: '点击下方时间段，或输入如 2 4 5',
+      mergeOk: '确认合并', cancel: '取消',
+      thNo: '序号', thStart: '开始倒计时', thEnd: '结束倒计时', thDur: '时长', thTotal: '总时长',
+      empty: '尚未开始。设置总时间后点击「开始」。',
+      alertTime: '请先设置大于 0 的总时间',
+      errAtLeast2: '请输入至少 2 个不同的序号',
+      errInvalid: (bad, max) => `无效序号：${bad}（当前范围 1-${max}）`,
+      errEmpty: list => `段 ${list} 还没有记录，不能合并`,
+    },
+    en: {
+      docTitle: 'Continuous Timer',
+      title: '⏱️ Continuous Timer',
+      totalTime: 'Total time:', min: 'min', sec: 'sec',
+      segCount: 'Segments:',
+      segTitle: '0 = sequential mode; N = pre-create N segments, click a segment to time it',
+      start: 'Start', record: 'Record segment', clickSeg: 'Click a segment to time', finished: 'Finished',
+      pause: 'Pause', resume: 'Resume', stop: 'Stop',
+      merge: 'Merge segments', reset: 'Reset', lang: 'Change to Chinese',
+      mergeLabel: 'Numbers to merge:',
+      mergePlaceholder: 'Click segments below, or type e.g. 2 4 5',
+      mergeOk: 'Merge', cancel: 'Cancel',
+      thNo: 'No.', thStart: 'Countdown start', thEnd: 'Countdown end', thDur: 'Duration', thTotal: 'Total',
+      empty: 'Not started yet. Set the total time and click "Start".',
+      alertTime: 'Please set a total time greater than 0',
+      errAtLeast2: 'Enter at least 2 different numbers',
+      errInvalid: (bad, max) => `Invalid numbers: ${bad} (valid range 1-${max})`,
+      errEmpty: list => `Segment ${list} has no record yet and cannot be merged`,
+    }
+  };
+  let lang = 'zh';
+  const t = k => I18N[lang][k];
+
+  function applyLang() {
+    document.title = t('docTitle');
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+    document.getElementById('titleEl').textContent = t('title');
+    document.getElementById('totalLabel').textContent = t('totalTime');
+    document.getElementById('minUnit').textContent = t('min');
+    document.getElementById('secUnit').textContent = t('sec');
+    document.getElementById('segLabel').textContent = t('segCount');
+    segInput.title = t('segTitle');
+    stopBtn.textContent = t('stop');
+    mergeBtn.textContent = t('merge');
+    resetBtn.textContent = t('reset');
+    document.getElementById('langBtn').textContent = t('lang');
+    document.getElementById('mergeLabel').textContent = t('mergeLabel');
+    mergeInput.placeholder = t('mergePlaceholder');
+    mergeOk.textContent = t('mergeOk');
+    mergeCancel.textContent = t('cancel');
+    for (const id of ['thNo', 'thStart', 'thEnd', 'thDur', 'thTotal']) {
+      document.getElementById(id).textContent = t(id);
+    }
+    emptyEl.textContent = t('empty');
+    pauseBtn.textContent = paused ? t('resume') : t('pause');
+    mergeError.textContent = '';
+    updateMainBtn();
+  }
+
   function fmt(ms) {
     ms = Math.max(0, Math.round(ms / 1000) * 1000);
     const s = ms / 1000;
@@ -232,9 +306,9 @@
   }
 
   function lapDuration(lap) {
-    // 总时长：parent 为所有 children 时长之和；普通段为自身时长
+    // 总时长：parent 为所有已完成 children 时长之和（进行中的不计）；普通段为自身时长
     return lap.children.length
-      ? lap.children.reduce((s, c) => s + (c.start - c.end), 0)
+      ? lap.children.reduce((s, c) => s + (c.end === null ? 0 : c.start - c.end), 0)
       : lap.start - lap.end;
   }
 
@@ -252,17 +326,26 @@
       const isActive = preset && running && i === activeIdx;
       if (isActive) tr.classList.add('active-seg');
       const rec = hasRecord(lap);
-      // 无 children 或 parent：只显示总时长，不显示时长；空段显示 —
+      // 有正在记录中的 child 时，parent 的结束倒计时待定
+      const hasPending = lap.children.length > 0 && lap.children[lap.children.length - 1].end === null;
+      // 无 children 或 parent：只显示总时长，不显示时长；空段显示 —；计时中显示 ···
+      const startTxt = rec ? fmt(lap.start) : (isActive ? fmt(lapStartRemaining) : '—');
+      const endTxt = hasPending ? '···' : (rec ? fmt(lap.end) : (isActive ? '···' : '—'));
+      const totTxt = rec ? fmt(lapDuration(lap)) : (isActive ? '···' : '—');
       tr.innerHTML = `<td>${n}${isActive ? ' ⏱' : ''}</td>`
-        + `<td>${rec ? fmt(lap.start) : '—'}</td>`
-        + `<td>${rec ? fmt(lap.end) : '—'}</td><td></td>`
-        + `<td>${rec ? fmt(lapDuration(lap)) : '—'}</td>`;
+        + `<td>${startTxt}</td>`
+        + `<td>${endTxt}</td><td></td>`
+        + `<td>${totTxt}</td>`;
       lapBody.appendChild(tr);
       lap.children.forEach((c, j) => {
         const ctr = document.createElement('tr');
-        ctr.className = 'child-row';
-        // child：只显示时长，不显示总时长
-        ctr.innerHTML = `<td>└ ${n}.${j + 1}</td><td>${fmt(c.start)}</td><td>${fmt(c.end)}</td><td>${fmt(c.start - c.end)}</td><td></td>`;
+        const pending = c.end === null; // 正在记录中的 child
+        ctr.className = 'child-row' + (pending ? ' active-child' : '');
+        // child：只显示时长，不显示总时长；进行中显示 ···
+        ctr.innerHTML = `<td>└ ${n}.${j + 1}${pending ? ' ⏱' : ''}</td>`
+          + `<td>${fmt(c.start)}</td>`
+          + `<td>${pending ? '···' : fmt(c.end)}</td>`
+          + `<td>${pending ? '···' : fmt(c.start - c.end)}</td><td></td>`;
         lapBody.appendChild(ctr);
       });
     });
@@ -279,16 +362,21 @@
   // 预设模式：把一次计时记入指定段
   function commitTiming(idx, startRem, endRem) {
     const lap = laps[idx];
-    if (!hasRecord(lap)) {
+    const last = lap.children[lap.children.length - 1];
+    if (last && last.end === null) {
+      // 已有进行中的 child（点击时立即创建的）：填入结束时间
+      last.end = endRem;
+    } else if (!hasRecord(lap)) {
       lap.start = startRem;
       lap.end = endRem;
+      return;
     } else {
       // 已有记录但没有 children：先把原记录变成第一个 child
       if (!lap.children.length) lap.children.push({ start: lap.start, end: lap.end });
       lap.children.push({ start: startRem, end: endRem });
-      lap.start = lap.children[0].start;
-      lap.end = lap.children[lap.children.length - 1].end;
     }
+    lap.start = lap.children[0].start;
+    lap.end = lap.children[lap.children.length - 1].end;
   }
 
   // 根据段数输入重建时间段列表（0 = 顺序模式，N = 预设 N 个空段）
@@ -308,10 +396,10 @@
   function updateMainBtn() {
     if (preset) {
       mainBtn.disabled = true;
-      mainBtn.textContent = finished ? '已结束' : '点击时间段计时';
+      mainBtn.textContent = finished ? t('finished') : t('clickSeg');
     } else {
       mainBtn.disabled = finished || paused;
-      mainBtn.textContent = finished ? '已结束' : (running ? '记录时间段' : '开始');
+      mainBtn.textContent = finished ? t('finished') : (running ? t('record') : t('start'));
     }
   }
 
@@ -369,7 +457,7 @@
     minInput.disabled = secInput.disabled = segInput.disabled = false;
     updateMainBtn();
     mainBtn.classList.remove('running');
-    pauseBtn.textContent = '暂停';
+    pauseBtn.textContent = t('pause');
     pauseBtn.classList.remove('paused');
     pauseBtn.disabled = stopBtn.disabled = true;
     renderLaps();
@@ -379,7 +467,7 @@
   // 启动倒计时（两种模式共用），成功返回 true
   function startCountdown() {
     previewFromInputs();
-    if (totalMs <= 0) { alert('请先设置大于 0 的总时间'); return false; }
+    if (totalMs <= 0) { alert(t('alertTime')); return false; }
     startEpoch = Date.now();
     lapStartRemaining = totalMs;
     running = true;
@@ -411,15 +499,23 @@
   // 预设模式：点击时间段 = 开始倒计时 / 切换到该段计时
   function handleSegmentClick(idx) {
     if (finished || paused) return;
+    let r;
     if (!running) {
       if (!startCountdown()) return;
-      activeIdx = idx;
-      lapStartRemaining = totalMs;
+      r = totalMs;
     } else {
-      const r = Math.max(0, Math.round(remaining() / 1000) * 1000);
+      r = Math.max(0, Math.round(remaining() / 1000) * 1000);
       commitTiming(activeIdx, lapStartRemaining, r);
-      activeIdx = idx;
-      lapStartRemaining = r;
+    }
+    activeIdx = idx;
+    lapStartRemaining = r;
+    const lap = laps[idx];
+    if (hasRecord(lap)) {
+      // 立即显示本次计时为进行中的 child：
+      // 若还没有 children，先把原记录变成第一个 child
+      if (!lap.children.length) lap.children.push({ start: lap.start, end: lap.end });
+      lap.children.push({ start: r, end: null });
+      lap.start = lap.children[0].start;
     }
     renderLaps();
   }
@@ -432,7 +528,7 @@
       pausedAt = Date.now();
       clearInterval(timerId);
       timerId = null;
-      pauseBtn.textContent = '继续';
+      pauseBtn.textContent = t('resume');
       pauseBtn.classList.add('paused');
       updateMainBtn(); // 暂停期间不能记录时间段
       updateMergeBtn();
@@ -441,7 +537,7 @@
       // 继续：把暂停时长补偿到起点
       startEpoch += Date.now() - pausedAt;
       paused = false;
-      pauseBtn.textContent = '暂停';
+      pauseBtn.textContent = t('pause');
       pauseBtn.classList.remove('paused');
       updateMainBtn();
       timerId = setInterval(tick, 100);
@@ -490,17 +586,17 @@
   function doMerge() {
     const nums = parseNums(mergeInput.value);
     if (nums.length < 2) {
-      mergeError.textContent = '请输入至少 2 个不同的序号';
+      mergeError.textContent = t('errAtLeast2');
       return;
     }
     const bad = nums.filter(n => n < 1 || n > laps.length);
     if (bad.length) {
-      mergeError.textContent = `无效序号：${bad.join(', ')}（当前范围 1-${laps.length}）`;
+      mergeError.textContent = t('errInvalid')(bad.join(', '), laps.length);
       return;
     }
     const empty = nums.filter(n => !hasRecord(laps[n - 1]));
     if (empty.length) {
-      mergeError.textContent = `段 ${empty.join(', ')} 还没有记录，不能合并`;
+      mergeError.textContent = t('errEmpty')(empty.join(', '));
       return;
     }
     // 被选中的段按序号升序全部成为 children（已是 parent 的先展开其 children）
@@ -534,7 +630,7 @@
     paused = false;
     minInput.disabled = secInput.disabled = segInput.disabled = false;
     mainBtn.classList.remove('running');
-    pauseBtn.textContent = '暂停';
+    pauseBtn.textContent = t('pause');
     pauseBtn.classList.remove('paused');
     pauseBtn.disabled = stopBtn.disabled = true;
     rebuild(); // 按段数输入重建（0=顺序模式清空；N=预设 N 个空段）
@@ -554,8 +650,14 @@
     if (!mainBtn.disabled) mainBtn.click();
   });
 
+  document.getElementById('langBtn').addEventListener('click', () => {
+    lang = lang === 'zh' ? 'en' : 'zh';
+    applyLang();
+  });
+
   rebuild();
   previewFromInputs();
+  applyLang();
 })();
 </script>
 </body>
