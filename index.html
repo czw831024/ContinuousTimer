@@ -10,11 +10,12 @@
     font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
     background: #1e1e2e;
     color: #e0e0e8;
-    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 2rem 1rem;
+    padding: 2rem 1rem 1rem;
   }
   h1 { font-size: 1.4rem; margin-bottom: 1.2rem; color: #9ecbff; }
   .setup {
@@ -104,18 +105,28 @@
     min-width: 32rem;
     background: #2a2a3c;
     border-radius: 8px;
-    overflow: hidden;
   }
+  th:first-child { border-top-left-radius: 8px; }
+  th:last-child { border-top-right-radius: 8px; }
   th, td {
     padding: 0.55rem 1.1rem;
     text-align: center;
     font-variant-numeric: tabular-nums;
   }
-  th { background: #383850; color: #9ecbff; font-weight: 600; }
+  th { background: #383850; color: #9ecbff; font-weight: 600; position: sticky; top: 0; z-index: 1; }
   tbody tr:nth-child(even) { background: #30304400; }
   tbody tr:nth-child(odd) { background: #26263630; }
   tbody tr { border-top: 1px solid #38385080; }
   #empty { color: #777; margin-top: 0.8rem; font-size: 0.9rem; }
+  /* 只滚动时间段列表，上方的倒计时和按钮固定 */
+  .lap-area {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
 </style>
 </head>
 <body>
@@ -147,19 +158,21 @@
     <span id="mergeError"></span>
   </div>
 
-  <table id="lapTable" hidden>
-    <thead>
-      <tr>
-        <th>序号</th>
-        <th>开始倒计时</th>
-        <th>结束倒计时</th>
-        <th>时长</th>
-        <th>总时长</th>
-      </tr>
-    </thead>
-    <tbody id="lapBody"></tbody>
-  </table>
-  <div id="empty">尚未开始。设置总时间后点击「开始」。</div>
+  <div class="lap-area">
+    <table id="lapTable" hidden>
+      <thead>
+        <tr>
+          <th>序号</th>
+          <th>开始倒计时</th>
+          <th>结束倒计时</th>
+          <th>时长</th>
+          <th>总时长</th>
+        </tr>
+      </thead>
+      <tbody id="lapBody"></tbody>
+    </table>
+    <div id="empty">尚未开始。设置总时间后点击「开始」。</div>
+  </div>
 
 <script>
 (() => {
