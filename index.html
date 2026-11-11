@@ -64,6 +64,7 @@
   #stopBtn { background: #ff5555; color: #fff; font-weight: 600; }
   #pauseBtn:disabled, #stopBtn:disabled { background: #44475a; color: #777; cursor: not-allowed; }
   #resetBtn { background: #44475a; color: #e0e0e8; }
+  #fullscreenBtn { background: #44475a; color: #e0e0e8; }
   #langBtn { background: #44475a; color: #e0e0e8; }
   #mergeBtn { background: #bd93f9; color: #1e1e2e; font-weight: 600; }
   #mergeBtn:disabled { background: #44475a; color: #777; cursor: not-allowed; }
@@ -151,6 +152,7 @@
     <button id="stopBtn" disabled>停止</button>
     <button id="mergeBtn" disabled>合并时间段</button>
     <button id="resetBtn">重置</button>
+    <button id="fullscreenBtn" aria-pressed="false">全屏</button>
     <button id="langBtn">转英文</button>
   </div>
 
@@ -188,6 +190,7 @@
   const pauseBtn = document.getElementById('pauseBtn');
   const stopBtn = document.getElementById('stopBtn');
   const resetBtn = document.getElementById('resetBtn');
+  const fullscreenBtn = document.getElementById('fullscreenBtn');
   const lapTable = document.getElementById('lapTable');
   const lapBody = document.getElementById('lapBody');
   const emptyEl = document.getElementById('empty');
@@ -223,6 +226,8 @@
       start: '开始', record: '记录时间段', clickSeg: '点击时间段计时', finished: '已结束',
       pause: '暂停', resume: '继续', stop: '停止',
       merge: '合并时间段', reset: '重置', lang: '转英文',
+      fullscreen: '全屏', exitFullscreen: '退出全屏',
+      fullscreenError: '无法切换全屏模式，请检查浏览器权限。',
       mergeLabel: '要合并的序号：',
       mergePlaceholder: '点击下方时间段，或输入如 2 4 5',
       mergeOk: '确认合并', cancel: '取消',
@@ -242,6 +247,8 @@
       start: 'Start', record: 'Record segment', clickSeg: 'Click a segment to time', finished: 'Finished',
       pause: 'Pause', resume: 'Resume', stop: 'Stop',
       merge: 'Merge segments', reset: 'Reset', lang: 'Change to Chinese',
+      fullscreen: 'Fullscreen', exitFullscreen: 'Exit fullscreen',
+      fullscreenError: 'Unable to change fullscreen mode. Check your browser permissions.',
       mergeLabel: 'Numbers to merge:',
       mergePlaceholder: 'Click segments below, or type e.g. 2 4 5',
       mergeOk: 'Merge', cancel: 'Cancel',
@@ -268,6 +275,8 @@
     stopBtn.textContent = t('stop');
     mergeBtn.textContent = t('merge');
     resetBtn.textContent = t('reset');
+    fullscreenBtn.textContent = document.fullscreenElement ? t('exitFullscreen') : t('fullscreen');
+    fullscreenBtn.setAttribute('aria-pressed', String(!!document.fullscreenElement));
     document.getElementById('langBtn').textContent = t('lang');
     document.getElementById('mergeLabel').textContent = t('mergeLabel');
     mergeInput.placeholder = t('mergePlaceholder');
@@ -457,7 +466,7 @@
   }
 
   async function syncScreenWakeLock() {
-    const shouldHold = running && !paused && document.visibilityState === 'visible';
+    const shouldHold = !!document.fullscreenElement && document.visibilityState === 'visible';
     if (!shouldHold) {
       if (screenWakeLock) {
         const lock = screenWakeLock;
@@ -489,7 +498,7 @@
       screenWakeLock = lock;
       lock.addEventListener('release', () => {
         if (screenWakeLock === lock) screenWakeLock = null;
-        if (running && !paused && document.visibilityState === 'visible') syncScreenWakeLock();
+        if (document.fullscreenElement && document.visibilityState === 'visible') syncScreenWakeLock();
       }, { once: true });
     } catch (error) {
       if (request && screenWakeLockRequest === request) screenWakeLockRequest = null;
@@ -706,6 +715,24 @@
   secInput.addEventListener('input', () => { if (!running && !finished) previewFromInputs(); });
   segInput.addEventListener('input', () => { if (!running) { rebuild(); previewFromInputs(); } });
   document.addEventListener('visibilitychange', syncScreenWakeLock);
+  document.addEventListener('fullscreenchange', () => {
+    fullscreenBtn.textContent = document.fullscreenElement ? t('exitFullscreen') : t('fullscreen');
+    fullscreenBtn.setAttribute('aria-pressed', String(!!document.fullscreenElement));
+    syncScreenWakeLock();
+  });
+
+  fullscreenBtn.addEventListener('click', async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch (error) {
+      console.warn('Unable to change fullscreen mode.', error);
+      alert(t('fullscreenError'));
+    }
+  });
 
   // 空格键 = 点击「开始 / 记录时间段」（在合并序号文本框中打字时除外）
   document.addEventListener('keydown', e => {
