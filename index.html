@@ -438,10 +438,27 @@
     }
   }
 
+  function beep() {
+    if (!window.AudioContext) return;
+    const context = new AudioContext();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const now = context.currentTime;
+    oscillator.frequency.setValueAtTime(880, now);
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 2);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 2);
+    oscillator.addEventListener('ended', () => context.close(), { once: true });
+  }
+
   function stopCountdown(timeUp) {
     clearInterval(timerId);
     timerId = null;
     const endRem = timeUp ? 0 : Math.max(0, Math.round(remaining() / 1000) * 1000);
+    if (timeUp) beep();
     if (preset) {
       if (activeIdx !== null) commitTiming(activeIdx, lapStartRemaining, endRem);
       activeIdx = null;
