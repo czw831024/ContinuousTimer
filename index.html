@@ -205,6 +205,8 @@
   let pausedAt = 0;       // 暂停时刻的时间戳
   let finished = false;
   let timerId = null;
+  let screenWakeLock = null;
+  let screenWakeLockRequest = null;
   let lapStartRemaining = 0; // 当前段开始时的剩余时间（毫秒）
   let laps = [];          // { start, end, children: [{start, end}] }，预设模式空段 start/end 为 null
   let preset = false;     // 预设段数模式
@@ -454,6 +456,47 @@
     oscillator.addEventListener('ended', () => context.close(), { once: true });
   }
 
+  async function syncScreenWakeLock() {
+    const shouldHold = running && !paused && document.visibilityState === 'visible';
+    if (!shouldHold) {
+      if (screenWakeLock) {
+        const lock = screenWakeLock;
+        screenWakeLock = null;
+        try {
+          await lock.release();
+        } catch (error) {
+          console.warn('Unable to release the screen wake lock.', error);
+        }
+      }
+      return;
+    }
+    if (!('wakeLock' in navigator) || screenWakeLock || screenWakeLockRequest) return;
+
+    let request = null;
+    try {
+      request = navigator.wakeLock.request('screen');
+      screenWakeLockRequest = request;
+      const lock = await request;
+      if (screenWakeLockRequest === request) screenWakeLockRequest = null;
+      if (!running || paused || document.visibilityState !== 'visible') {
+        await lock.release();
+        return;
+      }
+      if (lock.released) {
+        syncScreenWakeLock();
+        return;
+      }
+      screenWakeLock = lock;
+      lock.addEventListener('release', () => {
+        if (screenWakeLock === lock) screenWakeLock = null;
+        if (running && !paused && document.visibilityState === 'visible') syncScreenWakeLock();
+      }, { once: true });
+    } catch (error) {
+      if (request && screenWakeLockRequest === request) screenWakeLockRequest = null;
+      console.warn('Unable to keep the screen awake while the timer is running.', error);
+    }
+  }
+
   function stopCountdown(timeUp) {
     clearInterval(timerId);
     timerId = null;
@@ -467,6 +510,7 @@
     }
     running = false;
     paused = false;
+    syncScreenWakeLock();
     finished = timeUp;
     countdownEl.textContent = fmt(endRem);
     countdownEl.classList.remove('warning');
@@ -495,6 +539,7 @@
     if (!preset) mainBtn.classList.add('running');
     pauseBtn.disabled = stopBtn.disabled = false;
     timerId = setInterval(tick, 100);
+    syncScreenWakeLock();
     updateMergeBtn();
     render();
     return true;
@@ -547,6 +592,7 @@
       timerId = null;
       pauseBtn.textContent = t('resume');
       pauseBtn.classList.add('paused');
+      syncScreenWakeLock();
       updateMainBtn(); // 暂停期间不能记录时间段
       updateMergeBtn();
       render();
@@ -556,6 +602,7 @@
       paused = false;
       pauseBtn.textContent = t('pause');
       pauseBtn.classList.remove('paused');
+      syncScreenWakeLock();
       updateMainBtn();
       timerId = setInterval(tick, 100);
       updateMergeBtn();
@@ -645,6 +692,7 @@
     timerId = null;
     running = false;
     paused = false;
+    syncScreenWakeLock();
     minInput.disabled = secInput.disabled = segInput.disabled = false;
     mainBtn.classList.remove('running');
     pauseBtn.textContent = t('pause');
@@ -657,6 +705,7 @@
   minInput.addEventListener('input', () => { if (!running && !finished) previewFromInputs(); });
   secInput.addEventListener('input', () => { if (!running && !finished) previewFromInputs(); });
   segInput.addEventListener('input', () => { if (!running) { rebuild(); previewFromInputs(); } });
+  document.addEventListener('visibilitychange', syncScreenWakeLock);
 
   // 空格键 = 点击「开始 / 记录时间段」（在合并序号文本框中打字时除外）
   document.addEventListener('keydown', e => {
