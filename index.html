@@ -98,8 +98,8 @@
   table.merge-open tbody tr[data-n] { cursor: pointer; }
   table.merge-open tbody tr[data-n]:hover td { background: #bd93f922; }
   tbody tr.selected-row td { background: #bd93f94d; }
-  table.preset tbody tr[data-n] { cursor: pointer; }
-  table.preset tbody tr[data-n]:hover td { background: #50fa7b14; }
+  table.preset tbody tr[data-n], table.preset tbody tr[data-idle] { cursor: pointer; }
+  table.preset tbody tr[data-n]:hover td, table.preset tbody tr[data-idle]:hover td { background: #50fa7b14; }
   tbody tr.active-seg td { background: #50fa7b26; }
   tbody tr.active-seg td:first-child { color: #50fa7b; font-weight: 700; }
   tbody tr.active-child td { background: #50fa7b26 !important; }
@@ -212,6 +212,7 @@
   let screenWakeLockRequest = null;
   let lapStartRemaining = 0; // 当前段开始时的剩余时间（毫秒）
   let laps = [];          // { start, end, children: [{start, end}] }，预设模式空段 start/end 为 null
+  let idleLap = null;
   let preset = false;     // 预设段数模式
   let activeIdx = null;   // 预设模式：当前正在计时的段下标
 
@@ -329,12 +330,16 @@
 
   function renderLaps() {
     lapBody.innerHTML = '';
-    laps.forEach((lap, i) => {
+    const displayedLaps = preset ? [...laps, idleLap] : laps;
+    displayedLaps.forEach((lap, i) => {
+      const isIdle = preset && i === laps.length;
       const n = i + 1;
+      const idx = isIdle ? -1 : i;
       const tr = document.createElement('tr');
-      tr.dataset.n = n; // 顶层行可点击（合并选择 / 预设模式计时）
+      if (isIdle) tr.dataset.idle = 'true';
+      else tr.dataset.n = n; // 顶层行可点击（合并选择 / 预设模式计时）
       if (lap.children.length) tr.className = 'parent-row';
-      const isActive = preset && running && i === activeIdx;
+      const isActive = preset && running && idx === activeIdx;
       if (isActive) tr.classList.add('active-seg');
       const rec = hasRecord(lap);
       // 有正在记录中的 child 时，parent 的结束倒计时待定
@@ -343,7 +348,7 @@
       const startTxt = rec ? fmt(lap.start) : (isActive ? fmt(lapStartRemaining) : '—');
       const endTxt = hasPending ? '···' : (rec ? fmt(lap.end) : (isActive ? '···' : '—'));
       const totTxt = rec ? fmt(lapDuration(lap)) : (isActive ? '···' : '—');
-      tr.innerHTML = `<td>${n}${isActive ? ' ⏱' : ''}</td>`
+      tr.innerHTML = `<td>${isIdle ? 'Idle' : n}${isActive ? ' ⏱' : ''}</td>`
         + `<td>${startTxt}</td>`
         + `<td>${endTxt}</td><td></td>`
         + `<td>${totTxt}</td>`;
@@ -353,15 +358,15 @@
         const pending = c.end === null; // 正在记录中的 child
         ctr.className = 'child-row' + (pending ? ' active-child' : '');
         // child：只显示时长，不显示总时长；进行中显示 ···
-        ctr.innerHTML = `<td>└ ${n}.${j + 1}${pending ? ' ⏱' : ''}</td>`
+        ctr.innerHTML = `<td>└ ${isIdle ? '' : `${n}.${j + 1}`}${pending ? ' ⏱' : ''}</td>`
           + `<td>${fmt(c.start)}</td>`
           + `<td>${pending ? '···' : fmt(c.end)}</td>`
           + `<td>${pending ? '···' : fmt(c.start - c.end)}</td><td></td>`;
         lapBody.appendChild(ctr);
       });
     });
-    lapTable.hidden = laps.length === 0;
-    emptyEl.hidden = laps.length !== 0;
+    lapTable.hidden = displayedLaps.length === 0;
+    emptyEl.hidden = displayedLaps.length !== 0;
   }
 
   function addLap(startRem, endRem) {
@@ -372,7 +377,7 @@
 
   // 预设模式：把一次计时记入指定段
   function commitTiming(idx, startRem, endRem) {
-    const lap = laps[idx];
+    const lap = idx === -1 ? idleLap : laps[idx];
     const last = lap.children[lap.children.length - 1];
     if (last && last.end === null) {
       // 已有进行中的 child（点击时立即创建的）：填入结束时间
@@ -395,6 +400,7 @@
     const n = Math.min(99, Math.max(0, Math.floor(+segInput.value || 0)));
     preset = n > 0;
     laps = Array.from({ length: n }, () => ({ start: null, end: null, children: [] }));
+    idleLap = preset ? { start: null, end: null, children: [] } : null;
     activeIdx = null;
     finished = false;
     lapTable.classList.toggle('preset', preset);
@@ -580,7 +586,7 @@
     }
     activeIdx = idx;
     lapStartRemaining = r;
-    const lap = laps[idx];
+    const lap = idx === -1 ? idleLap : laps[idx];
     if (hasRecord(lap)) {
       // 立即显示本次计时为进行中的 child：
       // 若还没有 children，先把原记录变成第一个 child
@@ -636,7 +642,12 @@
   // 点击顶层时间段行：合并面板打开时 = 加入/移出输入框；预设模式 = 开始/切换计时
   lapBody.addEventListener('click', e => {
     const tr = e.target.closest('tr');
-    if (!tr || !tr.dataset.n) return;
+    if (!tr) return;
+    if (tr.dataset.idle) {
+      if (mergePanel.hidden && preset) handleSegmentClick(-1);
+      return;
+    }
+    if (!tr.dataset.n) return;
     const n = +tr.dataset.n;
     if (!mergePanel.hidden) {
       if (!hasRecord(laps[n - 1])) return; // 空段不能参与合并
